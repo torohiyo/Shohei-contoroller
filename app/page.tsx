@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { useTodos } from "@/lib/useTodos";
 import { useCalendar } from "@/lib/useCalendar";
@@ -20,6 +21,7 @@ function todayLabel() {
 }
 
 export default function Home() {
+  const router = useRouter();
   const { data: session, status } = useSession();
   const { todos, addTodo, toggleTodo, deleteTodo, syncFromCalendar, completionRate, overdueCount } = useTodos();
   const { events, taskEvents, loading: calLoading } = useCalendar();
@@ -117,6 +119,9 @@ export default function Home() {
                 <span className="text-xs font-bold text-gray-500">{healthPct}%</span>
               </div>
             </div>
+            <button onClick={() => router.push("/manage")} className="text-xs text-gray-500 hover:text-indigo-600 border border-gray-200 hover:border-indigo-300 rounded-lg px-2.5 py-1.5 transition-colors">
+              サジェスト管理
+            </button>
             <button onClick={() => signOut()} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
               ログアウト
             </button>
