@@ -1,11 +1,63 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
 
 export const maxDuration = 60;
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+// ── ChatGPT unofficial access ─────────────────────────────────────────────
+
+async function getChatGPTAccessToken(): Promise<string> {
+  const sessionToken = process.env.CHATGPT_SESSION_TOKEN;
+  if (!sessionToken) throw new Error("CHATGPT_SESSION_TOKEN が設定されていません");
+
+  const res = await fetch("https://chat.openai.com/api/auth/session", {
+    headers: {
+      Cookie: `__Secure-next-auth.session-token=${sessionToken}`,
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    },
+  });
+
+  if (!res.ok) throw new Error(`セッション取得失敗: ${res.status}`);
+  const data = await res.json();
+  if (!data.accessToken) throw new Error("セッショントークンが無効または期限切れです");
+  return data.accessToken;
+}
+
+async function askChatGPT(accessToken: string, prompt: string): Promise<string> {
+  const res = await fetch("https://chat.openai.com/backend-api/conversation", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    },
+    body: JSON.stringify({
+      action: "next",
+      messages: [{
+        id: crypto.randomUUID(),
+        author: { role: "user" },
+        content: { content_type: "text", parts: [prompt] },
+      }],
+      model: "gpt-4o",
+      parent_message_id: crypto.randomUUID(),
+      timezone_offset_min: -540,
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`ChatGPT API エラー: ${res.status} ${text.slice(0, 200)}`);
+  }
+
+  // Parse SSE stream — take the last data line before [DONE]
+  const text = await res.text();
+  const lines = text.split("\n").filter((l) => l.startsWith("data: ") && !l.includes("[DONE]"));
+  if (!lines.length) throw new Error("ChatGPT からレスポンスがありませんでした");
+
+  const lastData = JSON.parse(lines[lines.length - 1].replace("data: ", ""));
+  return lastData?.message?.content?.parts?.[0] ?? "";
+}
 
 // ── Gmail API helpers ──────────────────────────────────────────────────────
 
@@ -15,18 +67,15 @@ function getHeader(headers: { name: string; value: string }[], name: string) {
 
 function extractBody(payload: any): string {
   if (!payload) return "";
-  if (payload.body?.data) {
-    return Buffer.from(payload.body.data, "base64url").toString("utf-8");
-  }
+  if (payload.body?.data) return Buffer.from(payload.body.data, "base64url").toString("utf-8");
   if (payload.parts) {
     for (const part of payload.parts) {
-      if (part.mimeType === "text/plain" && part.body?.data) {
+      if (part.mimeType === "text/plain" && part.body?.data)
         return Buffer.from(part.body.data, "base64url").toString("utf-8");
-      }
     }
     for (const part of payload.parts) {
-      const text = extractBody(part);
-      if (text) return text;
+      const t = extractBody(part);
+      if (t) return t;
     }
   }
   return "";
@@ -40,191 +89,102 @@ async function gmailFetch(token: string, path: string, options?: RequestInit) {
   return res.json();
 }
 
-// ── Tool implementations ──────────────────────────────────────────────────
-
-async function listUnreadEmails(token: string) {
+async function fetchUnreadEmails(token: string) {
   const data = await gmailFetch(token, "/messages?q=is:unread+-from:me&maxResults=30");
   const messages: { id: string }[] = data.messages ?? [];
-  if (!messages.length) return { emails: [] };
+  if (!messages.length) return [];
 
   const summaries = await Promise.all(
-    messages.map((m) =>
+    messages.slice(0, 20).map((m) =>
       gmailFetch(token, `/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=In-Reply-To&metadataHeaders=List-Unsubscribe`)
     )
   );
 
-  return {
-    emails: summaries.map((msg) => ({
-      id: msg.id,
-      subject: getHeader(msg.payload?.headers ?? [], "subject") || "(件名なし)",
-      from: getHeader(msg.payload?.headers ?? [], "from"),
-      date: getHeader(msg.payload?.headers ?? [], "date"),
-      has_reply_to: !!getHeader(msg.payload?.headers ?? [], "in-reply-to"),
-      has_unsubscribe: !!getHeader(msg.payload?.headers ?? [], "list-unsubscribe"),
-      snippet: msg.snippet ?? "",
-    })),
-  };
+  return summaries.map((msg) => ({
+    id: msg.id as string,
+    subject: getHeader(msg.payload?.headers ?? [], "subject") || "(件名なし)",
+    from: getHeader(msg.payload?.headers ?? [], "from"),
+    date: getHeader(msg.payload?.headers ?? [], "date"),
+    hasReplyTo: !!getHeader(msg.payload?.headers ?? [], "in-reply-to"),
+    hasUnsubscribe: !!getHeader(msg.payload?.headers ?? [], "list-unsubscribe"),
+    snippet: (msg.snippet ?? "") as string,
+  }));
 }
 
-async function getEmailBody(token: string, email_id: string) {
-  const msg = await gmailFetch(token, `/messages/${email_id}?format=full`);
-  const body = extractBody(msg.payload).slice(0, 3000);
-  return { body };
-}
-
-async function markAsRead(token: string, email_ids: string[]) {
+async function markAllAsRead(token: string, ids: string[]) {
   await Promise.all(
-    email_ids.map((id) =>
+    ids.map((id) =>
       gmailFetch(token, `/messages/${id}/modify`, {
         method: "POST",
         body: JSON.stringify({ removeLabelIds: ["UNREAD"] }),
       })
     )
   );
-  return { ok: true, marked: email_ids.length };
 }
 
-// ── Tool definitions ──────────────────────────────────────────────────────
-
-const TOOLS: Anthropic.Tool[] = [
-  {
-    name: "list_unread_emails",
-    description: "Gmailの未読メール一覧を取得する。件名・送信者・日付・スニペットが含まれる。",
-    input_schema: { type: "object" as const, properties: {} },
-  },
-  {
-    name: "get_email_body",
-    description: "特定メールの本文を取得する。重要度判定が難しい場合に使う。",
-    input_schema: {
-      type: "object" as const,
-      properties: { email_id: { type: "string", description: "メールのID" } },
-      required: ["email_id"],
-    },
-  },
-  {
-    name: "mark_as_read",
-    description: "指定したメールを既読にする。",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        email_ids: { type: "array", items: { type: "string" }, description: "既読にするメールIDの配列" },
-      },
-      required: ["email_ids"],
-    },
-  },
-  {
-    name: "output_result",
-    description: "処理結果を出力する。必ず最後に呼び出す。",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        important_emails: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              id: { type: "string" },
-              subject: { type: "string" },
-              from: { type: "string" },
-              date: { type: "string" },
-              reason: { type: "string", enum: ["reply_to_me", "contract", "team", "personal"] },
-              snippet: { type: "string" },
-              reply_draft: { type: "string", description: "日本語の返信案。末尾に「松本翔平」署名を含める。" },
-            },
-            required: ["id", "subject", "from", "date", "reason", "snippet", "reply_draft"],
-          },
-        },
-      },
-      required: ["important_emails"],
-    },
-  },
-];
-
-// ── Agent loop ────────────────────────────────────────────────────────────
+// ── Main handler ──────────────────────────────────────────────────────────
 
 export async function POST() {
   const session = await getServerSession(authOptions);
   if (!session?.accessToken) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return NextResponse.json({ error: "ANTHROPIC_API_KEY が設定されていません" }, { status: 500 });
-  }
 
   const token = session.accessToken as string;
 
-  const messages: Anthropic.MessageParam[] = [
+  try {
+    const [accessToken, emails] = await Promise.all([
+      getChatGPTAccessToken(),
+      fetchUnreadEmails(token),
+    ]);
+
+    if (!emails.length) return NextResponse.json({ important_emails: [] });
+
+    const emailList = emails.map((e, i) =>
+      `[${i + 1}] ID:${e.id}\n件名: ${e.subject}\n送信者: ${e.from}\n日付: ${e.date}\n返信メール: ${e.hasReplyTo}\n配信停止ヘッダー: ${e.hasUnsubscribe}\n概要: ${e.snippet}`
+    ).join("\n\n---\n\n");
+
+    const prompt = `あなたはShohei Matsumoto（shohei.matsumoto@pacific-meta.co.jp, Pacific Meta）のメールアシスタントです。
+
+以下の未読メール一覧を分析して、重要なメールを選別し返信案を作成してください。
+
+重要メールの基準：
+- 自分への返信（返信メール=true、または件名が"Re:"で始まる）
+- 契約関連（契約・contract・agreement・NDA・覚書・署名・規約 などが件名に含まれる）
+- チームからのメール（@pacific-meta.co.jp ドメイン）
+- 個人からのメール（実在する人物からで営業・マーケ・ニュースレターでないもの）
+
+除外：配信停止ヘッダー=true、noreply送信元、マーケティング・営業メール
+
+---
+${emailList}
+---
+
+以下のJSON形式のみで回答してください（説明文・マークダウン不要）：
+{
+  "important_emails": [
     {
-      role: "user",
-      content: `あなたはShohei Matsumoto（shohei.matsumoto@pacific-meta.co.jp, Pacific Meta）のメールアシスタントです。
-
-以下の手順でGmailを処理してください：
-1. list_unread_emails で未読メール一覧を取得
-2. 各メールを確認し、必要なら get_email_body で本文を取得
-3. 重要メールを以下の基準で判定：
-   - 自分への返信（In-Reply-To あり / 件名が "Re:" で始まる）
-   - 契約関連（契約・contract・agreement・NDA・覚書・署名・規約 などが件名に含まれる）
-   - チームからのメール（@pacific-meta.co.jp ドメイン）
-   - 個人からのメール（実在する人物からで営業・マーケ・ニュースレターでないもの）
-4. 重要メールごとに日本語返信案を作成（ビジネス敬語、末尾に「松本翔平」署名）
-5. output_result で結果を出力
-6. mark_as_read で全未読メール（重要・不要問わず）を既読にする
-
-営業メール・マーケティング・ニュースレター（List-Unsubscribe ヘッダーあり、noreply送信元など）は除外してください。`,
-    },
-  ];
-
-  let finalResult: { important_emails: object[] } | null = null;
-
-  for (let i = 0; i < 10; i++) {
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 4096,
-      tools: TOOLS,
-      messages,
-    });
-
-    messages.push({ role: "assistant", content: response.content });
-
-    if (response.stop_reason === "end_turn") break;
-
-    const toolUses = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
-    if (!toolUses.length) break;
-
-    const toolResults: Anthropic.ToolResultBlockParam[] = [];
-
-    for (const toolUse of toolUses) {
-      let result: unknown;
-      const input = toolUse.input as Record<string, any>;
-
-      try {
-        switch (toolUse.name) {
-          case "list_unread_emails":
-            result = await listUnreadEmails(token);
-            break;
-          case "get_email_body":
-            result = await getEmailBody(token, input.email_id);
-            break;
-          case "mark_as_read":
-            result = await markAsRead(token, input.email_ids);
-            break;
-          case "output_result":
-            finalResult = input as { important_emails: object[] };
-            result = { ok: true };
-            break;
-          default:
-            result = { error: "unknown tool" };
-        }
-      } catch (e: any) {
-        result = { error: e?.message ?? "tool error" };
-      }
-
-      toolResults.push({ type: "tool_result", tool_use_id: toolUse.id, content: JSON.stringify(result) });
+      "id": "メールID",
+      "subject": "件名",
+      "from": "送信者",
+      "date": "日付",
+      "reason": "reply_to_me または contract または team または personal",
+      "snippet": "概要",
+      "reply_draft": "日本語の返信案（ビジネス敬語、末尾に「松本翔平」署名）"
     }
+  ]
+}`;
 
-    messages.push({ role: "user", content: toolResults });
+    const raw = await askChatGPT(accessToken, prompt);
 
-    if (finalResult) break;
+    // Extract JSON from response
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("JSONが返ってきませんでした");
+    const result = JSON.parse(jsonMatch[0]);
+
+    // Mark all fetched emails as read
+    await markAllAsRead(token, emails.map((e) => e.id));
+
+    return NextResponse.json(result);
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message ?? "エラーが発生しました" }, { status: 500 });
   }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return NextResponse.json((finalResult as any) ?? { important_emails: [] });
 }
