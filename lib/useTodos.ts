@@ -71,10 +71,32 @@ export function useTodos() {
     [todos, persist]
   );
 
+  const syncFromCalendar = useCallback(
+    (calendarTasks: { id: string; title: string; deadline?: string }[]) => {
+      const current = loadFromStorage();
+      const existingIds = new Set(current.map((t) => t.id));
+      const newTodos: Todo[] = calendarTasks
+        .filter((ct) => !existingIds.has(`cal-${ct.id}`))
+        .map((ct) => ({
+          id: `cal-${ct.id}`,
+          title: ct.title,
+          category: "work" as Category,
+          priority: "medium" as Priority,
+          status: "pending" as const,
+          deadline: ct.deadline,
+          createdAt: new Date().toISOString(),
+        }));
+      if (newTodos.length > 0) {
+        persist([...newTodos, ...current]);
+      }
+    },
+    [persist]
+  );
+
   const completionRate = todos.length === 0 ? 1 : todos.filter((t) => t.status === "completed").length / todos.length;
   const overdueCount = todos.filter(
     (t) => t.status === "pending" && t.deadline && new Date(t.deadline) < new Date()
   ).length;
 
-  return { todos, addTodo, toggleTodo, deleteTodo, completionRate, overdueCount };
+  return { todos, addTodo, toggleTodo, deleteTodo, syncFromCalendar, completionRate, overdueCount };
 }

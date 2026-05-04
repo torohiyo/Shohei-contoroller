@@ -18,8 +18,8 @@ function todayLabel() {
 
 export default function Home() {
   const { data: session, status } = useSession();
-  const { todos, addTodo, toggleTodo, deleteTodo, completionRate, overdueCount } = useTodos();
-  const { events, loading: calLoading } = useCalendar();
+  const { todos, addTodo, toggleTodo, deleteTodo, syncFromCalendar, completionRate, overdueCount } = useTodos();
+  const { events, taskEvents, loading: calLoading } = useCalendar();
   const [showModal, setShowModal] = useState(false);
   const [, setTick] = useState(0);
 
@@ -27,6 +27,13 @@ export default function Home() {
     const id = setInterval(() => setTick((t) => t + 1), 60000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (calLoading || taskEvents.length === 0) return;
+    syncFromCalendar(
+      taskEvents.map((e) => ({ id: e.id, title: e.cleanTitle, deadline: e.end }))
+    );
+  }, [calLoading, taskEvents, syncFromCalendar]);
 
   useEffect(() => {
     if (overdueCount === 0) return;
