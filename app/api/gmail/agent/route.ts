@@ -1,51 +1,30 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { NextResponse } from "next/server";
+import OpenAI from "openai";
 
 export const maxDuration = 60;
 
-// ── ChatGPT unofficial access ─────────────────────────────────────────────
+// ── OpenRouter ────────────────────────────────────────────────────────────
 
-async function askChatGPT(prompt: string): Promise<string> {
-  const sessionToken = process.env.CHATGPT_SESSION_TOKEN;
-  if (!sessionToken) throw new Error("CHATGPT_SESSION_TOKEN が設定されていません");
+async function askAI(prompt: string): Promise<string> {
+  if (!process.env.OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY が設定されていません");
 
-  const res = await fetch("https://chat.openai.com/backend-api/conversation", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${sessionToken}`,
-      "Content-Type": "application/json",
-      Accept: "text/event-stream",
-      Cookie: `__Secure-next-auth.session-token=${sessionToken}`,
-      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      Referer: "https://chat.openai.com/",
-      Origin: "https://chat.openai.com",
+  const client = new OpenAI({
+    apiKey: process.env.OPENROUTER_API_KEY,
+    baseURL: "https://openrouter.ai/api/v1",
+    defaultHeaders: {
+      "HTTP-Referer": "https://shohei-contoroller.vercel.app",
+      "X-Title": "Shohei Controller",
     },
-    body: JSON.stringify({
-      action: "next",
-      messages: [{
-        id: crypto.randomUUID(),
-        author: { role: "user" },
-        content: { content_type: "text", parts: [prompt] },
-      }],
-      model: "gpt-4o",
-      parent_message_id: crypto.randomUUID(),
-      timezone_offset_min: -540,
-    }),
   });
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`ChatGPT API エラー: ${res.status} ${text.slice(0, 200)}`);
-  }
+  const res = await client.chat.completions.create({
+    model: "openai/gpt-4o-mini",
+    messages: [{ role: "user", content: prompt }],
+  });
 
-  // Parse SSE stream — take the last data line before [DONE]
-  const text = await res.text();
-  const lines = text.split("\n").filter((l) => l.startsWith("data: ") && !l.includes("[DONE]"));
-  if (!lines.length) throw new Error("ChatGPT からレスポンスがありませんでした");
-
-  const lastData = JSON.parse(lines[lines.length - 1].replace("data: ", ""));
-  return lastData?.message?.content?.parts?.[0] ?? "";
+  return res.choices[0].message.content ?? "";
 }
 
 // ── Gmail API helpers ──────────────────────────────────────────────────────
@@ -159,7 +138,7 @@ ${emailList}
   ]
 }`;
 
-    const raw = await askChatGPT(prompt);
+    const raw = await askAI(prompt);
 
     // Extract JSON from response
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
