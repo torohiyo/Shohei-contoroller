@@ -31,13 +31,24 @@ function saveGenerated(ids: Set<string>) {
   localStorage.setItem(`${GENERATED_KEY}-${todayKey()}`, JSON.stringify([...ids]));
 }
 
+function getWeekNumber(date: Date): number {
+  const start = new Date(date.getFullYear(), 0, 1);
+  return Math.floor((date.getTime() - start.getTime()) / (7 * 24 * 60 * 60 * 1000));
+}
+
 function shouldRunToday(task: RecurringTask): boolean {
   const now = new Date();
-  const dow = now.getDay(); // 0=日
+  const dow = now.getDay();
   const dom = now.getDate();
 
   if (task.recurring === "daily") return true;
   if (task.recurring === "weekly") return (task.weekDays ?? []).includes(dow);
+  if (task.recurring === "biweekly") {
+    if (!(task.weekDays ?? []).includes(dow)) return false;
+    const createdWeek = getWeekNumber(new Date(task.createdAt));
+    const currentWeek = getWeekNumber(now);
+    return (currentWeek - createdWeek) % 2 === 0;
+  }
   if (task.recurring === "monthly") return task.monthDay === dom;
   return false;
 }

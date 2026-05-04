@@ -13,7 +13,7 @@ export interface Todo {
   createdAt: string;
 }
 
-export type RecurringType = "daily" | "weekly" | "monthly";
+export type RecurringType = "daily" | "weekly" | "biweekly" | "monthly";
 
 export interface RecurringTask {
   id: string;
@@ -31,6 +31,7 @@ export interface RecurringTask {
 export const RECURRING_LABEL: Record<RecurringType, string> = {
   daily: "毎日",
   weekly: "毎週",
+  biweekly: "隔週",
   monthly: "毎月",
 };
 
