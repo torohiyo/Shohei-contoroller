@@ -164,7 +164,7 @@ export default function MailPage() {
         {loading && (
           <div className="bg-white rounded-xl shadow-sm px-4 py-8 text-center space-y-2">
             <div className="w-8 h-8 border-4 border-indigo-100 border-t-indigo-500 rounded-full animate-spin mx-auto" />
-            <p className="text-sm text-gray-500">未読メールを分析中...</p>
+            <p className="text-sm text-gray-500">直近48時間のメールを分析中...</p>
           </div>
         )}
         {!loading && error && (
@@ -177,7 +177,7 @@ export default function MailPage() {
           <div className="flex items-center justify-center py-16 text-gray-400 text-sm">重要メールはありません</div>
         )}
         {!loading && !checked && !error && (
-          <div className="flex items-center justify-center py-16 text-gray-400 text-sm">「メールをチェック」を押すと未読メールを分析します</div>
+          <div className="flex items-center justify-center py-16 text-gray-400 text-sm">「メールをチェック」を押すと直近48時間のメールを分析します</div>
         )}
 
         {!loading && emails.map((email) => {
