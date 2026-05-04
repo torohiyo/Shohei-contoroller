@@ -52,6 +52,7 @@ export default function MailPage() {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [replies, setReplies] = useState<Record<string, string>>({});
+  const [replyErrors, setReplyErrors] = useState<Record<string, string>>({});
   const [generating, setGenerating] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState<string | null>(null);
   const [markingRead, setMarkingRead] = useState(false);
@@ -88,6 +89,7 @@ export default function MailPage() {
 
   async function generateReply(email: Email) {
     setGenerating((prev) => new Set(prev).add(email.id));
+    setReplyErrors((prev) => { const next = { ...prev }; delete next[email.id]; return next; });
     try {
       const res = await fetch("/api/gmail/reply", {
         method: "POST",
@@ -95,8 +97,14 @@ export default function MailPage() {
         body: JSON.stringify({ subject: email.subject, from: email.from, body: email.body }),
       });
       const data = await res.json();
-      setReplies((prev) => ({ ...prev, [email.id]: data.reply }));
-      setExpanded((prev) => new Set(prev).add(email.id));
+      if (data.error) {
+        setReplyErrors((prev) => ({ ...prev, [email.id]: data.error }));
+      } else {
+        setReplies((prev) => ({ ...prev, [email.id]: data.reply }));
+        setExpanded((prev) => new Set(prev).add(email.id));
+      }
+    } catch {
+      setReplyErrors((prev) => ({ ...prev, [email.id]: "通信エラーが発生しました" }));
     } finally {
       setGenerating((prev) => { const next = new Set(prev); next.delete(email.id); return next; });
     }
@@ -234,6 +242,12 @@ export default function MailPage() {
                         <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">{replies[email.id]}</p>
                       </div>
                     )}
+                  </div>
+                )}
+
+                {replyErrors[email.id] && (
+                  <div className="px-4 pb-2">
+                    <p className="text-xs text-red-400">{replyErrors[email.id]}</p>
                   </div>
                 )}
 
