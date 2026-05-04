@@ -1,6 +1,8 @@
 import { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 
+const PRODUCTION_URL = "https://shohei-contoroller.vercel.app";
+
 export const authOptions: NextAuthOptions = {
   providers: [
     GoogleProvider({
@@ -11,6 +13,7 @@ export const authOptions: NextAuthOptions = {
           scope: "openid email profile https://www.googleapis.com/auth/calendar.readonly",
           access_type: "offline",
           prompt: "consent",
+          redirect_uri: `${PRODUCTION_URL}/api/auth/callback/google`,
         },
       },
     }),
