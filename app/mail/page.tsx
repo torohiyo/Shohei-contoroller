@@ -48,6 +48,7 @@ export default function MailPage() {
   const router = useRouter();
   const { data: session } = useSession();
   const [emails, setEmails] = useState<Email[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [replies, setReplies] = useState<Record<string, string>>({});
@@ -58,10 +59,18 @@ export default function MailPage() {
 
   const fetchEmails = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch("/api/gmail");
       const data = await res.json();
-      setEmails(data.emails ?? []);
+      if (data.error) {
+        setError(data.error);
+        setEmails([]);
+      } else {
+        setEmails(data.emails ?? []);
+      }
+    } catch (e) {
+      setError("通信エラーが発生しました");
     } finally {
       setLoading(false);
     }
@@ -159,6 +168,16 @@ export default function MailPage() {
       <main className="max-w-3xl mx-auto px-4 py-5 space-y-3">
         {loading ? (
           <div className="flex items-center justify-center py-16 text-gray-400 text-sm">読み込み中...</div>
+        ) : error ? (
+          <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-5 text-center space-y-2">
+            <p className="text-sm font-semibold text-red-500">エラーが発生しました</p>
+            <p className="text-xs text-red-400">{error}</p>
+            <p className="text-xs text-gray-400 mt-3">
+              考えられる原因：<br />
+              ① Gmail APIが有効化されていない（Google Cloud Console で有効化）<br />
+              ② 再ログインが必要（ログアウトしてGoogleログインし直す）
+            </p>
+          </div>
         ) : emails.length === 0 ? (
           <div className="flex items-center justify-center py-16 text-gray-400 text-sm">重要メールはありません</div>
         ) : (

@@ -80,6 +80,13 @@ export async function GET() {
     `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=is:unread+-from:me&maxResults=40`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
+
+  if (!listRes.ok) {
+    const errData = await listRes.json();
+    const errMsg = errData?.error?.message ?? listRes.statusText;
+    return NextResponse.json({ error: errMsg, status: listRes.status }, { status: listRes.status });
+  }
+
   const listData = await listRes.json();
   const messages: { id: string }[] = listData.messages ?? [];
 
