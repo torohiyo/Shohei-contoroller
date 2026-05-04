@@ -57,23 +57,30 @@ async function gmailFetch(token: string, path: string, options?: RequestInit) {
   return res.json();
 }
 
-async function fetchUnreadEmails(token: string) {
+async function fetchSentThreadIds(token: string): Promise<Set<string>> {
+  const data = await gmailFetch(token, "/messages?q=in:sent+newer_than:7d&maxResults=50");
+  const messages: { id: string; threadId: string }[] = data.messages ?? [];
+  return new Set(messages.map((m) => m.threadId));
+}
+
+async function fetchRecentEmails(token: string, sentThreadIds: Set<string>) {
   const data = await gmailFetch(token, "/messages?q=newer_than:2d+-from:me&maxResults=40");
-  const messages: { id: string }[] = data.messages ?? [];
+  const messages: { id: string; threadId: string }[] = data.messages ?? [];
   if (!messages.length) return [];
 
   const summaries = await Promise.all(
-    messages.slice(0, 20).map((m) =>
-      gmailFetch(token, `/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=In-Reply-To&metadataHeaders=List-Unsubscribe`)
+    messages.slice(0, 25).map((m) =>
+      gmailFetch(token, `/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=List-Unsubscribe`)
     )
   );
 
-  return summaries.map((msg) => ({
+  return summaries.map((msg, i) => ({
     id: msg.id as string,
+    threadId: messages[i].threadId,
     subject: getHeader(msg.payload?.headers ?? [], "subject") || "(件名なし)",
     from: getHeader(msg.payload?.headers ?? [], "from"),
     date: getHeader(msg.payload?.headers ?? [], "date"),
-    hasReplyTo: !!getHeader(msg.payload?.headers ?? [], "in-reply-to"),
+    isReplyToMe: sentThreadIds.has(messages[i].threadId),
     hasUnsubscribe: !!getHeader(msg.payload?.headers ?? [], "list-unsubscribe"),
     snippet: (msg.snippet ?? "") as string,
   }));
@@ -88,46 +95,34 @@ export async function POST() {
   const token = session.accessToken as string;
 
   try {
-    const emails = await fetchUnreadEmails(token);
+    const sentThreadIds = await fetchSentThreadIds(token);
+    const emails = await fetchRecentEmails(token, sentThreadIds);
 
     if (!emails.length) return NextResponse.json({ important_emails: [] });
 
     const emailList = emails.map((e, i) =>
-      `[${i + 1}] ID:${e.id}\n件名: ${e.subject}\n送信者: ${e.from}\n日付: ${e.date}\n返信メール: ${e.hasReplyTo}\n配信停止ヘッダー: ${e.hasUnsubscribe}\n概要: ${e.snippet}`
+      `[${i + 1}] ID:${e.id}\n件名: ${e.subject}\n送信者: ${e.from}\n日付: ${e.date}\n自分の送信スレへの返信: ${e.isReplyToMe}\n配信停止ヘッダー: ${e.hasUnsubscribe}\n概要: ${e.snippet}`
     ).join("\n\n---\n\n");
 
-    const prompt = `You are filtering emails for Matsumoto Shohei (松本頌平), CEO of Pacific Meta (shohei.matsumoto@pacific-meta.co.jp).
+    const prompt = `以下は松本頌平（Pacific Meta CEO, shohei.matsumoto@pacific-meta.co.jp）宛の直近メール一覧です。対応が必要な重要メールのみを選別してください。
 
-## Task
-From the email list below, select only the important ones that need his attention.
+## 重要メールの条件（いずれかに該当）
+1. 「自分の送信スレへの返信: true」のもの（確実に自分が送ったメールへの返信）
+2. 件名に契約関連ワードが含まれる（契約・agreement・NDA・覚書・署名・規約など）
+3. 送信者のドメインが @pacific-meta.co.jp（自分以外のチームメンバー）
+4. 送信者の名前が明らかに個人名（山田太郎、Taro Yamada のような人名。会社名・サービス名・団体名は除く）
 
-## Important = any of these
-- Replies to his emails (hasReplyTo=true, or subject starts with "Re:")
-- Contract/legal (keywords: 契約, contract, agreement, NDA, 覚書, 署名, 規約)
-- From his team (@pacific-meta.co.jp, excluding himself)
-- Personal emails from real individuals
+## 除外するもの
+- 「配信停止ヘッダー: true」のメール
+- noreply・no-reply・newsletter・info・support 等の自動送信アドレス
+- 営業・マーケティング・セールス・イベント告知メール
+- 送信者が明らかに企業・団体・サービス名のメール
 
-## Exclude
-- hasUnsubscribe=true
-- noreply / newsletter / automated senders
-- Sales, marketing, promotional emails
-
-## Emails
+## メール一覧
 ${emailList}
 
-Respond ONLY with valid JSON, no markdown:
-{
-  "important_emails": [
-    {
-      "id": "email id",
-      "subject": "subject",
-      "from": "sender",
-      "date": "date",
-      "reason": "reply_to_me or contract or team or personal",
-      "snippet": "snippet"
-    }
-  ]
-}`;
+## 出力形式（JSONのみ。説明文・マークダウン不要）
+{"important_emails":[{"id":"メールID","subject":"件名","from":"送信者","date":"日付","reason":"reply_to_me または contract または team または personal","snippet":"概要"}]}`;
 
     const raw = await askAI(prompt);
 
