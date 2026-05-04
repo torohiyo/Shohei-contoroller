@@ -1,47 +1,72 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
-
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+import OpenAI from "openai";
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.accessToken) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { subject, from, body } = await req.json();
-
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return NextResponse.json({ error: "ANTHROPIC_API_KEY が設定されていません" }, { status: 500 });
+  if (!process.env.OPENROUTER_API_KEY) {
+    return NextResponse.json({ error: "OPENROUTER_API_KEY が設定されていません" }, { status: 500 });
   }
 
-  try {
-    const message = await client.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 1024,
-      messages: [
-        {
-          role: "user",
-          content: `あなたはShohei Matsumoto（Pacific Meta, shohei.matsumoto@pacific-meta.co.jp）のメール返信アシスタントです。
+  const { subject, from, body, snippet, answers } = await req.json();
 
-以下のメールへの返信文章を日本語で作成してください。
-- ビジネスメールとして自然な敬語で書く
-- 相手の要件に対して具体的に応答する
-- 末尾に「松本」と署名を入れる（日本語メールは「松本」、英語メールは「Shohei」）
-- 件名・区切り線・説明文は不要、返信本文のみ出力
+  const client = new OpenAI({
+    apiKey: process.env.OPENROUTER_API_KEY,
+    baseURL: "https://openrouter.ai/api/v1",
+    defaultHeaders: {
+      "HTTP-Referer": "https://shohei-contoroller.vercel.app",
+      "X-Title": "Shohei Controller",
+    },
+  });
 
-送信者: ${from}
-件名: ${subject}
+  const answersSection = answers?.length
+    ? `\n\nAdditional context from Shohei:\n${answers.map((a: { question: string; answer: string }) => `Q: ${a.question}\nA: ${a.answer}`).join("\n\n")}`
+    : "";
 
-メール本文:
-${body}`,
-        },
-      ],
-    });
+  const res = await client.chat.completions.create({
+    model: "google/gemma-4-26b-a4b-it:free",
+    messages: [
+      {
+        role: "user",
+        content: `You are writing an email reply for Matsumoto Shohei (松本頌平), CEO of Pacific Meta (shohei.matsumoto@pacific-meta.co.jp).
 
-    const reply = message.content[0].type === "text" ? message.content[0].text : "";
-    return NextResponse.json({ reply });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? "Anthropic APIエラー" }, { status: 500 });
-  }
+## Email to reply to
+From: ${from}
+Subject: ${subject}
+Body: ${body || snippet}
+${answersSection}
+
+## Writing style
+Japanese emails → reply in Japanese:
+- Start with "〇〇様" (use sender's family name)
+- "お世話になります、松本です。" or "お世話になります。Pacific Metaの松本です。"
+- Concise and direct, warm tone, use "！" occasionally
+- End with "引き続きよろしくお願いいたします。\n\n松本"
+
+English emails → reply in English:
+- Professional but casual and direct
+- Sign off as "Shohei"
+
+## Example Japanese reply
+中山様
+
+お世話になります、松本です。
+ご連絡ありがとうございます！
+
+5/8 15:00〜で私と岩崎の時間を確保させていただきます。
+場所は前回と同じくフクラスに伺う形で問題ございませんでしょうか。
+
+引き続きよろしくお願いいたします。
+
+松本
+
+Output the reply text ONLY. No subject, no explanation, no markdown.`,
+      },
+    ],
+  });
+
+  const reply = res.choices[0].message.content ?? "";
+  return NextResponse.json({ reply });
 }
