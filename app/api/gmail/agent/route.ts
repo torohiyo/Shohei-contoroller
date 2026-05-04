@@ -6,31 +6,20 @@ export const maxDuration = 60;
 
 // ── ChatGPT unofficial access ─────────────────────────────────────────────
 
-async function getChatGPTAccessToken(): Promise<string> {
+async function askChatGPT(prompt: string): Promise<string> {
   const sessionToken = process.env.CHATGPT_SESSION_TOKEN;
   if (!sessionToken) throw new Error("CHATGPT_SESSION_TOKEN が設定されていません");
 
-  const res = await fetch("https://chat.openai.com/api/auth/session", {
-    headers: {
-      Cookie: `__Secure-next-auth.session-token=${sessionToken}`,
-      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    },
-  });
-
-  if (!res.ok) throw new Error(`セッション取得失敗: ${res.status}`);
-  const data = await res.json();
-  if (!data.accessToken) throw new Error("セッショントークンが無効または期限切れです");
-  return data.accessToken;
-}
-
-async function askChatGPT(accessToken: string, prompt: string): Promise<string> {
   const res = await fetch("https://chat.openai.com/backend-api/conversation", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      Authorization: `Bearer ${sessionToken}`,
       "Content-Type": "application/json",
       Accept: "text/event-stream",
+      Cookie: `__Secure-next-auth.session-token=${sessionToken}`,
       "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      Referer: "https://chat.openai.com/",
+      Origin: "https://chat.openai.com",
     },
     body: JSON.stringify({
       action: "next",
@@ -131,10 +120,7 @@ export async function POST() {
   const token = session.accessToken as string;
 
   try {
-    const [accessToken, emails] = await Promise.all([
-      getChatGPTAccessToken(),
-      fetchUnreadEmails(token),
-    ]);
+    const emails = await fetchUnreadEmails(token);
 
     if (!emails.length) return NextResponse.json({ important_emails: [] });
 
@@ -173,7 +159,7 @@ ${emailList}
   ]
 }`;
 
-    const raw = await askChatGPT(accessToken, prompt);
+    const raw = await askChatGPT(prompt);
 
     // Extract JSON from response
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
