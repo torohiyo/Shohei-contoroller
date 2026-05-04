@@ -20,7 +20,7 @@ async function askAI(prompt: string): Promise<string> {
   });
 
   const res = await client.chat.completions.create({
-    model: "openai/gpt-4o-mini",
+    model: "google/gemma-4-26b-a4b-it:free",
     messages: [{ role: "user", content: prompt }],
   });
 
