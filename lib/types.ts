@@ -13,6 +13,36 @@ export interface Todo {
   createdAt: string;
 }
 
+export type RecurringType = "daily" | "weekly" | "monthly";
+
+export interface RecurringTask {
+  id: string;
+  title: string;
+  category: Category;
+  priority: Priority;
+  recurring: RecurringType;
+  weekDays?: number[]; // 0=日, 1=月, ..., 6=土
+  monthDay?: number;   // 1-31
+  deadlineTimeSlot?: number; // 0-48
+  note?: string;
+  createdAt: string;
+}
+
+export const RECURRING_LABEL: Record<RecurringType, string> = {
+  daily: "毎日",
+  weekly: "毎週",
+  monthly: "毎月",
+};
+
+export const CATEGORY_SUGGESTIONS: Record<Category, string[]> = {
+  work:     ["メールチェック・返信", "MTG設定", "提案書作成", "リサーチ", "会議資料作成", "進捗確認", "タスク整理"],
+  home:     ["掃除", "洗濯", "料理", "買い物", "ゴミ出し", "片付け", "水やり"],
+  training: ["ランニング", "筋トレ", "ストレッチ", "ジム", "ヨガ", "ウォーキング"],
+  english:  ["単語学習", "リスニング", "スピーキング練習", "音読", "文法学習", "英語日記"],
+  hobby:    ["読書", "映画鑑賞", "ゲーム", "音楽", "イラスト", "料理"],
+  other:    ["メモ整理", "計画作成", "振り返り", "連絡", "手続き"],
+};
+
 export interface ShoppingItem {
   id: string;
   name: string;

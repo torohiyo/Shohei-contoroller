@@ -4,10 +4,12 @@ import { useState, useEffect } from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { useTodos } from "@/lib/useTodos";
 import { useCalendar } from "@/lib/useCalendar";
+import { useRecurringTasks } from "@/lib/useRecurringTasks";
 import { Category, Priority } from "@/lib/types";
 import TodoItem from "@/components/TodoItem";
 import AddTodoModal from "@/components/AddTodoModal";
 import ShoppingList from "@/components/ShoppingList";
+import { buildDeadlineISO } from "@/lib/deadline";
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
@@ -21,6 +23,7 @@ export default function Home() {
   const { data: session, status } = useSession();
   const { todos, addTodo, toggleTodo, deleteTodo, syncFromCalendar, completionRate, overdueCount } = useTodos();
   const { events, taskEvents, loading: calLoading } = useCalendar();
+  const { addRecurring, getTodayPending, markGenerated } = useRecurringTasks();
   const [showModal, setShowModal] = useState(false);
   const [, setTick] = useState(0);
 
@@ -28,6 +31,19 @@ export default function Home() {
     const id = setInterval(() => setTick((t) => t + 1), 60000);
     return () => clearInterval(id);
   }, []);
+
+  // 定期タスクの自動追加
+  useEffect(() => {
+    const pending = getTodayPending();
+    if (pending.length === 0) return;
+    pending.forEach((rt) => {
+      const deadline = rt.deadlineTimeSlot !== undefined
+        ? buildDeadlineISO(new Date(), rt.deadlineTimeSlot)
+        : undefined;
+      addTodo({ title: rt.title, category: rt.category, priority: rt.priority, deadline, note: rt.note });
+    });
+    markGenerated(pending.map((t) => t.id));
+  }, [getTodayPending, markGenerated, addTodo]);
 
   useEffect(() => {
     if (calLoading || taskEvents.length === 0) return;
@@ -181,7 +197,28 @@ export default function Home() {
 
       {showModal && (
         <AddTodoModal
-          onAdd={(p) => addTodo(p as { title: string; category: Category; priority: Priority; deadline?: string; note?: string })}
+          onAdd={(p) => {
+            if (p.recurring) {
+              addRecurring({
+                title: p.title,
+                category: p.category as Category,
+                priority: p.priority as Priority,
+                recurring: p.recurring.type,
+                weekDays: p.recurring.weekDays,
+                monthDay: p.recurring.monthDay,
+                deadlineTimeSlot: p.recurring.deadlineTimeSlot,
+                note: p.note,
+              });
+            }
+            // 定期タスクでも今日分はすぐ追加
+            addTodo({
+              title: p.title,
+              category: p.category as Category,
+              priority: p.priority as Priority,
+              deadline: p.deadline ?? (p.recurring?.deadlineTimeSlot !== undefined ? buildDeadlineISO(new Date(), p.recurring.deadlineTimeSlot) : undefined),
+              note: p.note,
+            });
+          }}
           onClose={() => setShowModal(false)}
         />
       )}
