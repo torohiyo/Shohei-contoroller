@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.92.0",
     "googleapis": "^171.4.0",
     "next": "^16.2.4",
     "next-auth": "^4.24.14",

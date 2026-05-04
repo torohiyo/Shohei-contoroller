@@ -10,7 +10,7 @@ export const authOptions: NextAuthOptions = {
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       authorization: {
         params: {
-          scope: "openid email profile https://www.googleapis.com/auth/calendar.readonly",
+          scope: "openid email profile https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/gmail.modify",
           access_type: "offline",
           prompt: "consent",
           redirect_uri: `${PRODUCTION_URL}/api/auth/callback/google`,
