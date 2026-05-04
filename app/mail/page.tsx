@@ -261,19 +261,6 @@ export default function MailPage() {
                     </div>
                   )}
 
-                  {/* Pre-generated reply from agent (fallback) */}
-                  {!qa && email.reply_draft && (
-                    <div className="bg-gray-50 border border-gray-100 rounded-xl p-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-gray-500">自動生成された返信案</span>
-                        <button onClick={() => copyText(`${email.id}-draft`, email.reply_draft)}
-                          className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
-                          {copied === `${email.id}-draft` ? "コピー済み ✓" : "コピー"}
-                        </button>
-                      </div>
-                      <p className="text-xs text-gray-600 leading-relaxed whitespace-pre-wrap">{email.reply_draft}</p>
-                    </div>
-                  )}
                 </div>
               )}
 

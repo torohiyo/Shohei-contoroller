@@ -58,7 +58,7 @@ async function gmailFetch(token: string, path: string, options?: RequestInit) {
 }
 
 async function fetchUnreadEmails(token: string) {
-  const data = await gmailFetch(token, "/messages?q=is:unread+-from:me&maxResults=30");
+  const data = await gmailFetch(token, "/messages?q=newer_than:2d+-from:me&maxResults=40");
   const messages: { id: string }[] = data.messages ?? [];
   if (!messages.length) return [];
 
@@ -79,17 +79,6 @@ async function fetchUnreadEmails(token: string) {
   }));
 }
 
-async function markAllAsRead(token: string, ids: string[]) {
-  await Promise.all(
-    ids.map((id) =>
-      gmailFetch(token, `/messages/${id}/modify`, {
-        method: "POST",
-        body: JSON.stringify({ removeLabelIds: ["UNREAD"] }),
-      })
-    )
-  );
-}
-
 // ── Main handler ──────────────────────────────────────────────────────────
 
 export async function POST() {
@@ -107,56 +96,26 @@ export async function POST() {
       `[${i + 1}] ID:${e.id}\n件名: ${e.subject}\n送信者: ${e.from}\n日付: ${e.date}\n返信メール: ${e.hasReplyTo}\n配信停止ヘッダー: ${e.hasUnsubscribe}\n概要: ${e.snippet}`
     ).join("\n\n---\n\n");
 
-    const prompt = `You are an email assistant for Matsumoto Shohei (松本頌平), CEO of Pacific Meta (shohei.matsumoto@pacific-meta.co.jp).
+    const prompt = `You are filtering emails for Matsumoto Shohei (松本頌平), CEO of Pacific Meta (shohei.matsumoto@pacific-meta.co.jp).
 
 ## Task
-Analyze the unread emails below. Select important ones and draft replies in Matsumoto's voice.
+From the email list below, select only the important ones that need his attention.
 
-## What counts as important
+## Important = any of these
 - Replies to his emails (hasReplyTo=true, or subject starts with "Re:")
-- Contract/legal related (keywords: 契約, contract, agreement, NDA, 覚書, 署名, 規約)
-- Emails from his team (@pacific-meta.co.jp domain, excluding himself)
-- Personal emails from real individuals (not marketing/sales/newsletters)
+- Contract/legal (keywords: 契約, contract, agreement, NDA, 覚書, 署名, 規約)
+- From his team (@pacific-meta.co.jp, excluding himself)
+- Personal emails from real individuals
 
 ## Exclude
 - hasUnsubscribe=true
-- From noreply, newsletter, automated senders
-- Sales/marketing/promotional emails
+- noreply / newsletter / automated senders
+- Sales, marketing, promotional emails
 
-## Reply style (match this exactly)
-Japanese emails → reply in Japanese:
-- Start with "〇〇様" (use sender's name if known)
-- Opening: "お世話になります、松本です。" or "お世話になります。Pacific Metaの松本です。"
-- Concise and direct — address the point immediately
-- Warm but professional tone, use "！" occasionally
-- End with "引き続きよろしくお願いいたします。\n\n松本"
-
-English emails → reply in English:
-- Professional but casual tone
-- Direct and concise
-- Sign off as "Shohei"
-
-## Example Japanese reply
-中山様
-
-お世話になります、松本です。
-ご連絡ありがとうございます！
-
-5/8 15:00〜で私と岩崎の時間を確保させていただきます。
-場所は前回と同じくフクラスに伺う形で問題ございませんでしょうか。
-
-引き続きよろしくお願いいたします。
-
-松本
-
----
-## Emails to process
-
+## Emails
 ${emailList}
 
----
-
-Respond ONLY with valid JSON, no markdown, no explanation:
+Respond ONLY with valid JSON, no markdown:
 {
   "important_emails": [
     {
@@ -165,8 +124,7 @@ Respond ONLY with valid JSON, no markdown, no explanation:
       "from": "sender",
       "date": "date",
       "reason": "reply_to_me or contract or team or personal",
-      "snippet": "snippet",
-      "reply_draft": "reply text in appropriate language"
+      "snippet": "snippet"
     }
   ]
 }`;
@@ -177,9 +135,6 @@ Respond ONLY with valid JSON, no markdown, no explanation:
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("JSONが返ってきませんでした");
     const result = JSON.parse(jsonMatch[0]);
-
-    // Mark all fetched emails as read
-    await markAllAsRead(token, emails.map((e) => e.id));
 
     return NextResponse.json(result);
   } catch (e: any) {
