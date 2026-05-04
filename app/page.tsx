@@ -1,93 +1,188 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSession, signIn, signOut } from "next-auth/react";
 import { useTodos } from "@/lib/useTodos";
-import { Category, CATEGORY_LABEL } from "@/lib/types";
+import { useCalendar } from "@/lib/useCalendar";
+import { Category, Priority } from "@/lib/types";
 import TodoItem from "@/components/TodoItem";
 import AddTodoModal from "@/components/AddTodoModal";
 
-type Filter = "all" | Category;
+function formatTime(iso: string) {
+  return new Date(iso).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
+}
 
-const FILTERS: { key: Filter; label: string }[] = [
-  { key: "all", label: "すべて" },
-  { key: "work", label: "仕事" },
-  { key: "home", label: "家事" },
-  { key: "other", label: "その他" },
-];
+function todayLabel() {
+  return new Date().toLocaleDateString("ja-JP", { month: "long", day: "numeric", weekday: "short" });
+}
 
 export default function Home() {
-  const { todos, addTodo, toggleTodo, deleteTodo } = useTodos();
-  const [filter, setFilter] = useState<Filter>("all");
+  const { data: session, status } = useSession();
+  const { todos, addTodo, toggleTodo, deleteTodo, completionRate, overdueCount } = useTodos();
+  const { events, loading: calLoading } = useCalendar();
   const [showModal, setShowModal] = useState(false);
+  const [, setTick] = useState(0);
 
-  const filtered = filter === "all" ? todos : todos.filter((t) => t.category === filter);
-  const pending = filtered.filter((t) => t.status === "pending");
-  const completed = filtered.filter((t) => t.status === "completed");
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 60000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (overdueCount === 0) return;
+    if (!("Notification" in window)) return;
+    if (Notification.permission === "granted") {
+      new Notification("期限切れのタスクがあります", {
+        body: `${overdueCount}件のタスクが期限を過ぎています`,
+      });
+    } else if (Notification.permission !== "denied") {
+      Notification.requestPermission();
+    }
+  }, [overdueCount]);
+
+  const pending = todos.filter((t) => t.status === "pending");
+  const completed = todos.filter((t) => t.status === "completed");
+
+  const healthPct = Math.round(completionRate * 100);
+  const healthColor =
+    healthPct >= 70 ? "bg-emerald-400" : healthPct >= 40 ? "bg-amber-400" : "bg-red-400";
+
+  if (status === "loading") {
+    return <div className="min-h-screen flex items-center justify-center text-gray-400">読み込み中...</div>;
+  }
+
+  if (!session) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-gray-50">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Shohei Controller</h1>
+          <p className="text-gray-400 text-sm">Googleでログインして今日のタスクを管理する</p>
+        </div>
+        <button
+          onClick={() => signIn("google")}
+          className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl px-6 py-3.5 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50 transition-colors"
+        >
+          <svg className="w-5 h-5" viewBox="0 0 24 24">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+          </svg>
+          Googleでログイン
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-100 sticky top-0 z-10">
-        <div className="max-w-lg mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="text-lg font-bold text-gray-900">Shohei Controller</h1>
-          <button
-            onClick={() => setShowModal(true)}
-            className="w-9 h-9 bg-indigo-500 rounded-full flex items-center justify-center shadow-md shadow-indigo-200"
-          >
-            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="max-w-lg mx-auto px-4 pb-3 flex gap-2">
-          {FILTERS.map((f) => (
+        <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
+          <div>
+            <h1 className="text-base font-bold text-gray-900">Shohei Controller</h1>
+            <p className="text-xs text-gray-400">{todayLabel()}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <p className="text-xs text-gray-400">体力</p>
+              <div className="flex items-center gap-1.5">
+                <div className="w-20 h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-700 ${healthColor}`}
+                    style={{ width: `${healthPct}%` }}
+                  />
+                </div>
+                <span className="text-xs font-bold text-gray-500">{healthPct}%</span>
+              </div>
+            </div>
             <button
-              key={f.key}
-              onClick={() => setFilter(f.key)}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                filter === f.key
-                  ? "bg-indigo-500 text-white"
-                  : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-              }`}
+              onClick={() => signOut()}
+              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
             >
-              {f.label}
+              ログアウト
             </button>
-          ))}
+          </div>
         </div>
       </header>
 
-      <main className="max-w-lg mx-auto px-4 py-5 space-y-6">
-        {pending.length > 0 && (
-          <section className="space-y-2">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-1">
-              未完了 {pending.length}件
-            </p>
-            {pending.map((todo) => (
-              <TodoItem key={todo.id} todo={todo} onToggle={toggleTodo} onDelete={deleteTodo} />
-            ))}
-          </section>
-        )}
-
-        {completed.length > 0 && (
-          <section className="space-y-2">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-1">
-              完了 {completed.length}件
-            </p>
-            {completed.map((todo) => (
-              <TodoItem key={todo.id} todo={todo} onToggle={toggleTodo} onDelete={deleteTodo} />
-            ))}
-          </section>
-        )}
-
-        {filtered.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-24 text-gray-400">
-            <p className="text-sm">タスクはありません</p>
+      <main className="max-w-lg mx-auto px-4 py-5 space-y-5">
+        {/* Google Calendar */}
+        <section>
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">今日の予定</h2>
+          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+            {calLoading ? (
+              <p className="text-sm text-gray-400 px-4 py-3">読み込み中...</p>
+            ) : events.length === 0 ? (
+              <p className="text-sm text-gray-400 px-4 py-3">今日の予定はありません</p>
+            ) : (
+              events.map((ev, i) => (
+                <div
+                  key={ev.id}
+                  className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? "border-t border-gray-50" : ""}`}
+                >
+                  <div className="w-1 h-8 bg-indigo-400 rounded-full shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-800 truncate">{ev.title}</p>
+                    <p className="text-xs text-gray-400">
+                      {ev.isAllDay ? "終日" : `${formatTime(ev.start)} – ${formatTime(ev.end)}`}
+                    </p>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
-        )}
+        </section>
+
+        {/* Tasks */}
+        <section>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+              今日のタスク {overdueCount > 0 && (
+                <span className="ml-1 text-red-500">{overdueCount}件期限切れ</span>
+              )}
+            </h2>
+            <button
+              onClick={() => setShowModal(true)}
+              className="w-7 h-7 bg-indigo-500 rounded-full flex items-center justify-center shadow-md shadow-indigo-200"
+            >
+              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            {pending.length > 0 && (
+              <div className="space-y-2">
+                {pending.map((todo) => (
+                  <TodoItem key={todo.id} todo={todo} onToggle={toggleTodo} onDelete={deleteTodo} />
+                ))}
+              </div>
+            )}
+
+            {completed.length > 0 && (
+              <div className="space-y-2 mt-3">
+                <p className="text-xs text-gray-400 px-1">完了 {completed.length}件</p>
+                {completed.map((todo) => (
+                  <TodoItem key={todo.id} todo={todo} onToggle={toggleTodo} onDelete={deleteTodo} />
+                ))}
+              </div>
+            )}
+
+            {todos.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                <p className="text-sm">タスクを追加してください</p>
+              </div>
+            )}
+          </div>
+        </section>
       </main>
 
       {showModal && (
-        <AddTodoModal onAdd={addTodo} onClose={() => setShowModal(false)} />
+        <AddTodoModal
+          onAdd={(p) => addTodo(p as { title: string; category: Category; priority: Priority; deadline?: string; note?: string })}
+          onClose={() => setShowModal(false)}
+        />
       )}
     </div>
   );
