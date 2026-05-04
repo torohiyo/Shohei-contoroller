@@ -7,6 +7,7 @@ import { useCalendar } from "@/lib/useCalendar";
 import { Category, Priority } from "@/lib/types";
 import TodoItem from "@/components/TodoItem";
 import AddTodoModal from "@/components/AddTodoModal";
+import ShoppingList from "@/components/ShoppingList";
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
@@ -49,10 +50,8 @@ export default function Home() {
 
   const pending = todos.filter((t) => t.status === "pending");
   const completed = todos.filter((t) => t.status === "completed");
-
   const healthPct = Math.round(completionRate * 100);
-  const healthColor =
-    healthPct >= 70 ? "bg-emerald-400" : healthPct >= 40 ? "bg-amber-400" : "bg-red-400";
+  const healthColor = healthPct >= 70 ? "bg-emerald-400" : healthPct >= 40 ? "bg-amber-400" : "bg-red-400";
 
   if (status === "loading") {
     return <div className="min-h-screen flex items-center justify-center text-gray-400">読み込み中...</div>;
@@ -84,7 +83,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-100 sticky top-0 z-10">
-        <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
+        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
           <div>
             <h1 className="text-base font-bold text-gray-900">Shohei Controller</h1>
             <p className="text-xs text-gray-400">{todayLabel()}</p>
@@ -102,87 +101,82 @@ export default function Home() {
                 <span className="text-xs font-bold text-gray-500">{healthPct}%</span>
               </div>
             </div>
-            <button
-              onClick={() => signOut()}
-              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-            >
+            <button onClick={() => signOut()} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
               ログアウト
             </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-lg mx-auto px-4 py-5 space-y-5">
-        {/* Google Calendar */}
-        <section>
-          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">今日の予定</h2>
-          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-            {calLoading ? (
-              <p className="text-sm text-gray-400 px-4 py-3">読み込み中...</p>
-            ) : events.length === 0 ? (
-              <p className="text-sm text-gray-400 px-4 py-3">今日の予定はありません</p>
-            ) : (
-              events.map((ev, i) => (
-                <div
-                  key={ev.id}
-                  className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? "border-t border-gray-50" : ""}`}
+      <main className="max-w-5xl mx-auto px-4 py-5">
+        <div className="flex gap-5 items-start">
+
+          {/* 左: カレンダー + タスク */}
+          <div className="flex-1 min-w-0 space-y-5">
+            <section>
+              <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">今日の予定</h2>
+              <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+                {calLoading ? (
+                  <p className="text-sm text-gray-400 px-4 py-3">読み込み中...</p>
+                ) : events.length === 0 ? (
+                  <p className="text-sm text-gray-400 px-4 py-3">今日の予定はありません</p>
+                ) : (
+                  events.map((ev, i) => (
+                    <div key={ev.id} className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? "border-t border-gray-50" : ""}`}>
+                      <div className="w-1 h-8 bg-indigo-400 rounded-full shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate">{ev.title}</p>
+                        <p className="text-xs text-gray-400">
+                          {ev.isAllDay ? "終日" : `${formatTime(ev.start)} – ${formatTime(ev.end)}`}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </section>
+
+            <section>
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                  今日のタスク{overdueCount > 0 && <span className="ml-1.5 text-red-500">{overdueCount}件期限切れ</span>}
+                </h2>
+                <button
+                  onClick={() => setShowModal(true)}
+                  className="w-7 h-7 bg-indigo-500 rounded-full flex items-center justify-center shadow-md shadow-indigo-200"
                 >
-                  <div className="w-1 h-8 bg-indigo-400 rounded-full shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-800 truncate">{ev.title}</p>
-                    <p className="text-xs text-gray-400">
-                      {ev.isAllDay ? "終日" : `${formatTime(ev.start)} – ${formatTime(ev.end)}`}
-                    </p>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </section>
+                  <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                </button>
+              </div>
 
-        {/* Tasks */}
-        <section>
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
-              今日のタスク {overdueCount > 0 && (
-                <span className="ml-1 text-red-500">{overdueCount}件期限切れ</span>
-              )}
-            </h2>
-            <button
-              onClick={() => setShowModal(true)}
-              className="w-7 h-7 bg-indigo-500 rounded-full flex items-center justify-center shadow-md shadow-indigo-200"
-            >
-              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-            </button>
-          </div>
-
-          <div className="space-y-2">
-            {pending.length > 0 && (
               <div className="space-y-2">
                 {pending.map((todo) => (
                   <TodoItem key={todo.id} todo={todo} onToggle={toggleTodo} onDelete={deleteTodo} />
                 ))}
+                {completed.length > 0 && (
+                  <div className="space-y-2 pt-2">
+                    <p className="text-xs text-gray-400 px-1">完了 {completed.length}件</p>
+                    {completed.map((todo) => (
+                      <TodoItem key={todo.id} todo={todo} onToggle={toggleTodo} onDelete={deleteTodo} />
+                    ))}
+                  </div>
+                )}
+                {todos.length === 0 && (
+                  <div className="flex items-center justify-center py-12 text-gray-400">
+                    <p className="text-sm">タスクを追加してください</p>
+                  </div>
+                )}
               </div>
-            )}
-
-            {completed.length > 0 && (
-              <div className="space-y-2 mt-3">
-                <p className="text-xs text-gray-400 px-1">完了 {completed.length}件</p>
-                {completed.map((todo) => (
-                  <TodoItem key={todo.id} todo={todo} onToggle={toggleTodo} onDelete={deleteTodo} />
-                ))}
-              </div>
-            )}
-
-            {todos.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-12 text-gray-400">
-                <p className="text-sm">タスクを追加してください</p>
-              </div>
-            )}
+            </section>
           </div>
-        </section>
+
+          {/* 右: 買い物リスト */}
+          <div className="w-56 shrink-0">
+            <ShoppingList />
+          </div>
+        </div>
       </main>
 
       {showModal && (
