@@ -107,33 +107,66 @@ export async function POST() {
       `[${i + 1}] ID:${e.id}\n件名: ${e.subject}\n送信者: ${e.from}\n日付: ${e.date}\n返信メール: ${e.hasReplyTo}\n配信停止ヘッダー: ${e.hasUnsubscribe}\n概要: ${e.snippet}`
     ).join("\n\n---\n\n");
 
-    const prompt = `あなたはShohei Matsumoto（shohei.matsumoto@pacific-meta.co.jp, Pacific Meta）のメールアシスタントです。
+    const prompt = `You are an email assistant for Matsumoto Shohei (松本頌平), CEO of Pacific Meta (shohei.matsumoto@pacific-meta.co.jp).
 
-以下の未読メール一覧を分析して、重要なメールを選別し返信案を作成してください。
+## Task
+Analyze the unread emails below. Select important ones and draft replies in Matsumoto's voice.
 
-重要メールの基準：
-- 自分への返信（返信メール=true、または件名が"Re:"で始まる）
-- 契約関連（契約・contract・agreement・NDA・覚書・署名・規約 などが件名に含まれる）
-- チームからのメール（@pacific-meta.co.jp ドメイン）
-- 個人からのメール（実在する人物からで営業・マーケ・ニュースレターでないもの）
+## What counts as important
+- Replies to his emails (hasReplyTo=true, or subject starts with "Re:")
+- Contract/legal related (keywords: 契約, contract, agreement, NDA, 覚書, 署名, 規約)
+- Emails from his team (@pacific-meta.co.jp domain, excluding himself)
+- Personal emails from real individuals (not marketing/sales/newsletters)
 
-除外：配信停止ヘッダー=true、noreply送信元、マーケティング・営業メール
+## Exclude
+- hasUnsubscribe=true
+- From noreply, newsletter, automated senders
+- Sales/marketing/promotional emails
+
+## Reply style (match this exactly)
+Japanese emails → reply in Japanese:
+- Start with "〇〇様" (use sender's name if known)
+- Opening: "お世話になります、松本です。" or "お世話になります。Pacific Metaの松本です。"
+- Concise and direct — address the point immediately
+- Warm but professional tone, use "！" occasionally
+- End with "引き続きよろしくお願いいたします。\n\n松本"
+
+English emails → reply in English:
+- Professional but casual tone
+- Direct and concise
+- Sign off as "Shohei"
+
+## Example Japanese reply
+中山様
+
+お世話になります、松本です。
+ご連絡ありがとうございます！
+
+5/8 15:00〜で私と岩崎の時間を確保させていただきます。
+場所は前回と同じくフクラスに伺う形で問題ございませんでしょうか。
+
+引き続きよろしくお願いいたします。
+
+松本
 
 ---
+## Emails to process
+
 ${emailList}
+
 ---
 
-以下のJSON形式のみで回答してください（説明文・マークダウン不要）：
+Respond ONLY with valid JSON, no markdown, no explanation:
 {
   "important_emails": [
     {
-      "id": "メールID",
-      "subject": "件名",
-      "from": "送信者",
-      "date": "日付",
-      "reason": "reply_to_me または contract または team または personal",
-      "snippet": "概要",
-      "reply_draft": "日本語の返信案（ビジネス敬語、末尾に「松本翔平」署名）"
+      "id": "email id",
+      "subject": "subject",
+      "from": "sender",
+      "date": "date",
+      "reason": "reply_to_me or contract or team or personal",
+      "snippet": "snippet",
+      "reply_draft": "reply text in appropriate language"
     }
   ]
 }`;
