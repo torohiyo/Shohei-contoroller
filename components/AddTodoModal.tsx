@@ -1,16 +1,17 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 import {
   Category, Priority, RecurringType,
   CATEGORY_COLOR, CATEGORY_LABEL, PRIORITY_LABEL,
-  CATEGORY_SUGGESTIONS, RECURRING_LABEL,
+  RECURRING_LABEL,
 } from "@/lib/types";
 import { slotToTime, timeToSlot, parseDateInput, formatDateLabel, buildDeadlineISO } from "@/lib/deadline";
+import { useCustomSuggestions } from "@/lib/useCustomSuggestions";
 
 const CATEGORIES: Category[] = ["work", "home", "training", "english", "hobby", "other"];
 const PRIORITIES: Priority[] = ["high", "medium", "low"];
-const RECURRING_TYPES: RecurringType[] = ["daily", "weekly", "monthly"];
+const RECURRING_TYPES: RecurringType[] = ["daily", "weekly", "biweekly", "monthly"];
 const WEEK_DAYS = ["日", "月", "火", "水", "木", "金", "土"];
 
 interface AddParams {
@@ -41,7 +42,6 @@ export default function AddTodoModal({ onAdd, onClose }: Props) {
   const [deadlineDate, setDeadlineDate] = useState<Date>(new Date());
   const [timeSlot, setTimeSlot] = useState(47);
   const [dateInput, setDateInput] = useState("");
-  const [dateEditing, setDateEditing] = useState(false);
   const [manualTime, setManualTime] = useState("");
 
   const [isRecurring, setIsRecurring] = useState(false);
@@ -49,14 +49,13 @@ export default function AddTodoModal({ onAdd, onClose }: Props) {
   const [weekDays, setWeekDays] = useState<number[]>([1, 2, 3, 4, 5]); // 月〜金
   const [monthDay, setMonthDay] = useState(new Date().getDate());
 
-  const dateRef = useRef<HTMLInputElement>(null);
+  const { suggestions } = useCustomSuggestions();
 
   function commitDateInput() {
-    if (!dateInput.trim()) { setDateEditing(false); return; }
+    if (!dateInput.trim()) return;
     const parsed = parseDateInput(dateInput);
     if (parsed) setDeadlineDate(parsed);
     setDateInput("");
-    setDateEditing(false);
   }
 
   function handleManualTime(val: string) {
@@ -85,7 +84,7 @@ export default function AddTodoModal({ onAdd, onClose }: Props) {
       note,
       recurring: isRecurring ? {
         type: recurringType,
-        weekDays: recurringType === "weekly" ? weekDays : undefined,
+        weekDays: (recurringType === "weekly" || recurringType === "biweekly") ? weekDays : undefined,
         monthDay: recurringType === "monthly" ? monthDay : undefined,
         deadlineTimeSlot: timeSlot,
       } : undefined,
@@ -99,7 +98,7 @@ export default function AddTodoModal({ onAdd, onClose }: Props) {
     low: "border-gray-300 bg-gray-50 text-gray-400",
   };
 
-  const suggestions = CATEGORY_SUGGESTIONS[category];
+  const currentSuggestions = suggestions[category] ?? [];
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
@@ -136,7 +135,7 @@ export default function AddTodoModal({ onAdd, onClose }: Props) {
               className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
             <div className="flex flex-wrap gap-1.5 mt-2">
-              {suggestions.map((s) => (
+              {currentSuggestions.map((s) => (
                 <button
                   key={s}
                   type="button"
@@ -190,7 +189,7 @@ export default function AddTodoModal({ onAdd, onClose }: Props) {
                   ))}
                 </div>
 
-                {recurringType === "weekly" && (
+                {(recurringType === "weekly" || recurringType === "biweekly") && (
                   <div className="flex gap-1">
                     {WEEK_DAYS.map((d, i) => (
                       <button key={i} type="button" onClick={() => toggleWeekDay(i)}
@@ -228,24 +227,17 @@ export default function AddTodoModal({ onAdd, onClose }: Props) {
               {!isRecurring && (
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-400 w-8">日付</span>
-                  {dateEditing ? (
-                    <input
-                      ref={dateRef}
-                      autoFocus
-                      value={dateInput}
-                      onChange={(e) => setDateInput(e.target.value)}
-                      onBlur={commitDateInput}
-                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commitDateInput(); } }}
-                      placeholder="0504 / 2dl / 1wl"
-                      className="flex-1 text-sm border border-indigo-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                    />
-                  ) : (
-                    <button type="button" onClick={() => setDateEditing(true)}
-                      className="text-sm font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-1.5 hover:bg-indigo-100 transition-colors">
-                      {formatDateLabel(deadlineDate)}
-                    </button>
-                  )}
-                  <span className="text-xs text-gray-300">例: 0504 / 2dl / 1wl</span>
+                  <span className="text-sm font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-1.5 shrink-0">
+                    {formatDateLabel(deadlineDate)}
+                  </span>
+                  <input
+                    value={dateInput}
+                    onChange={(e) => setDateInput(e.target.value)}
+                    onBlur={commitDateInput}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commitDateInput(); } }}
+                    placeholder="0504 / 2dl / 1wl"
+                    className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+                  />
                 </div>
               )}
 
