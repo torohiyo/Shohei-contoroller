@@ -53,6 +53,7 @@ export default function MailPage() {
   const router = useRouter();
   const { data: session } = useSession();
   const [emails, setEmails] = useState<Email[]>([]);
+  const [debug, setDebug] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [checked, setChecked] = useState(false);
@@ -66,9 +67,11 @@ export default function MailPage() {
     setEmails([]);
     setChecked(false);
     setQaMap({});
+    setDebug(null);
     try {
       const res = await fetch("/api/gmail/agent", { method: "POST" });
       const data = await res.json();
+      setDebug(data._debug ?? null);
       if (data.error) setError(data.error);
       else { setEmails(data.important_emails ?? []); setChecked(true); }
     } catch { setError("通信エラーが発生しました"); }
@@ -174,7 +177,15 @@ export default function MailPage() {
           </div>
         )}
         {!loading && checked && emails.length === 0 && !error && (
-          <div className="flex items-center justify-center py-16 text-gray-400 text-sm">重要メールはありません</div>
+          <div className="space-y-3">
+            <div className="flex items-center justify-center py-8 text-gray-400 text-sm">重要メールはありません</div>
+            {debug && (
+              <details className="bg-gray-100 rounded-xl p-3 text-xs text-gray-500">
+                <summary className="cursor-pointer font-semibold">デバッグ情報</summary>
+                <pre className="mt-2 whitespace-pre-wrap break-all">{JSON.stringify(debug, null, 2)}</pre>
+              </details>
+            )}
+          </div>
         )}
         {!loading && !checked && !error && (
           <div className="flex items-center justify-center py-16 text-gray-400 text-sm">「メールをチェック」を押すと直近48時間のメールを分析します</div>

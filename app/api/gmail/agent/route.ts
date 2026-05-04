@@ -70,7 +70,7 @@ export async function POST() {
   ]);
 
   const messages: { id: string; threadId: string }[] = inboxData.messages ?? [];
-  if (!messages.length) return NextResponse.json({ important_emails: [] });
+  if (!messages.length) return NextResponse.json({ important_emails: [], _debug: { step: "no_messages", inboxError: inboxData.error } });
 
   const detailed = await Promise.all(
     messages.slice(0, 30).map((m) =>
@@ -79,21 +79,39 @@ export async function POST() {
     )
   );
 
-  const important = detailed
-    .map((msg) => {
-      const { important, reason } = classify(msg, sentData);
-      if (!important) return null;
+  const classified = detailed.map((msg) => {
+    const { important, reason } = classify(msg, sentData);
+    const headers = msg.payload?.headers ?? [];
+    return {
+      id: msg.id,
+      from: getHeader(headers, "from"),
+      subject: getHeader(headers, "subject"),
+      important,
+      reason,
+    };
+  });
+
+  const important = classified
+    .filter((r) => r.important)
+    .map((r) => {
+      const msg = detailed.find((m) => m.id === r.id)!;
       const headers = msg.payload?.headers ?? [];
       return {
         id: msg.id as string,
         subject: getHeader(headers, "subject") || "(件名なし)",
         from: getHeader(headers, "from"),
         date: getHeader(headers, "date"),
-        reason,
+        reason: r.reason,
         snippet: (msg.snippet ?? "") as string,
       };
-    })
-    .filter(Boolean);
+    });
 
-  return NextResponse.json({ important_emails: important });
+  return NextResponse.json({
+    important_emails: important,
+    _debug: {
+      total_fetched: messages.length,
+      sent_thread_count: sentData.size,
+      classified: classified.map((c) => ({ from: c.from, subject: c.subject, important: c.important, reason: c.reason })),
+    },
+  });
 }
