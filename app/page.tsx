@@ -161,15 +161,13 @@ export default function Home() {
             <button onClick={() => router.push("/mail")} className="text-xs text-gray-500 hover:text-indigo-600 border border-gray-200 hover:border-indigo-300 rounded-lg px-2.5 py-1.5 transition-colors">
               メール
             </button>
-            {("Notification" in window || true) && (
-              <button onClick={toggleNotification}
-                title={notifState === "enabled" ? "通知オン（クリックでオフ）" : "通知をオンにする"}
-                className={`w-8 h-8 flex items-center justify-center rounded-lg border transition-colors ${notifState === "enabled" ? "border-indigo-300 bg-indigo-50 text-indigo-500" : "border-gray-200 text-gray-400 hover:text-indigo-500 hover:border-indigo-300"}`}>
-                <svg className="w-4 h-4" fill={notifState === "enabled" ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                </svg>
-              </button>
-            )}
+            <button onClick={toggleNotification}
+              title={notifState === "enabled" ? "通知オン（クリックでオフ）" : "通知をオンにする"}
+              className={`w-8 h-8 flex items-center justify-center rounded-lg border transition-colors ${notifState === "enabled" ? "border-indigo-300 bg-indigo-50 text-indigo-500" : "border-gray-200 text-gray-400 hover:text-indigo-500 hover:border-indigo-300"}`}>
+              <svg className="w-4 h-4" fill={notifState === "enabled" ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+            </button>
             <button onClick={() => router.push("/schedule")} className="text-xs text-gray-500 hover:text-indigo-600 border border-gray-200 hover:border-indigo-300 rounded-lg px-2.5 py-1.5 transition-colors">
               空き時間
             </button>
