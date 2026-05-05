@@ -1,5 +1,6 @@
 import { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
+import { redis } from "@/lib/redis";
 
 const PRODUCTION_URL = "https://shohei-contoroller.vercel.app";
 
@@ -24,6 +25,9 @@ export const authOptions: NextAuthOptions = {
         token.accessToken = account.access_token;
         token.refreshToken = account.refresh_token;
         token.expiresAt = account.expires_at;
+        if (account.refresh_token) {
+          await redis.set("push:refresh_token", account.refresh_token).catch(() => {});
+        }
       }
       return token;
     },

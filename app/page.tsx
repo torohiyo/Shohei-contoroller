@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { useTodos } from "@/lib/useTodos";
@@ -28,11 +28,48 @@ export default function Home() {
   const { addRecurring, getTodayPending, markGenerated } = useRecurringTasks();
   const [showModal, setShowModal] = useState(false);
   const [, setTick] = useState(0);
+  const [notifState, setNotifState] = useState<"unknown" | "enabled" | "disabled">("unknown");
+
+  const checkNotifState = useCallback(async () => {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    setNotifState(sub ? "enabled" : "disabled");
+  }, []);
+
+  const toggleNotification = useCallback(async () => {
+    if (!("serviceWorker" in navigator)) return;
+    const reg = await navigator.serviceWorker.ready;
+    if (notifState === "enabled") {
+      const sub = await reg.pushManager.getSubscription();
+      await sub?.unsubscribe();
+      await fetch("/api/push/subscribe", { method: "DELETE" });
+      setNotifState("disabled");
+    } else {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") return;
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!),
+      });
+      await fetch("/api/push/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sub),
+      });
+      setNotifState("enabled");
+    }
+  }, [notifState]);
 
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 60000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.register("/sw.js").then(() => checkNotifState());
+  }, [checkNotifState]);
 
   // 定期タスクの自動追加
   useEffect(() => {
@@ -122,6 +159,15 @@ export default function Home() {
             <button onClick={() => router.push("/mail")} className="text-xs text-gray-500 hover:text-indigo-600 border border-gray-200 hover:border-indigo-300 rounded-lg px-2.5 py-1.5 transition-colors">
               メール
             </button>
+            {notifState !== "unknown" && (
+              <button onClick={toggleNotification}
+                title={notifState === "enabled" ? "通知オン（クリックでオフ）" : "通知をオンにする"}
+                className={`w-8 h-8 flex items-center justify-center rounded-lg border transition-colors ${notifState === "enabled" ? "border-indigo-300 bg-indigo-50 text-indigo-500" : "border-gray-200 text-gray-400 hover:text-indigo-500 hover:border-indigo-300"}`}>
+                <svg className="w-4 h-4" fill={notifState === "enabled" ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+              </button>
+            )}
             <button onClick={() => router.push("/schedule")} className="text-xs text-gray-500 hover:text-indigo-600 border border-gray-200 hover:border-indigo-300 rounded-lg px-2.5 py-1.5 transition-colors">
               空き時間
             </button>
@@ -235,4 +281,11 @@ export default function Home() {
       )}
     </div>
   );
+}
+
+function urlBase64ToUint8Array(base64: string) {
+  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
+  const b64 = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(b64);
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
 }
