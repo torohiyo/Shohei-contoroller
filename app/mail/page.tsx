@@ -422,7 +422,7 @@ export default function MailPage() {
                           value={qa.reply}
                           onChange={(e) => setQaMap((prev) => ({ ...prev, [email.id]: { ...prev[email.id], reply: e.target.value } }))}
                           rows={8}
-                          className="w-full text-xs text-gray-700 leading-relaxed bg-transparent border-0 outline-none resize-none"
+                          className="w-full text-xs text-gray-700 leading-relaxed bg-white border border-indigo-100 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"
                         />
                       </div>
                     )}

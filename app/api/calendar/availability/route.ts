@@ -33,7 +33,7 @@ export async function GET() {
   const token = session.accessToken as string;
   const now = new Date();
   const timeMin = now.toISOString();
-  const timeMax = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
+  const timeMax = new Date(now.getTime() + 31 * 24 * 60 * 60 * 1000).toISOString();
 
   try {
     const res = await fetch(
@@ -62,7 +62,7 @@ export async function GET() {
 
     // Generate free slots for next 10 weekdays
     const slots: string[] = [];
-    for (let i = 0; i < 14 && slots.length < 10; i++) {
+    for (let i = 0; i < 31 && slots.length < 30; i++) {
       const d = jst(new Date(now.getTime() + i * 24 * 60 * 60 * 1000));
       if (d.dow === 0 || d.dow === 6) continue;
 
