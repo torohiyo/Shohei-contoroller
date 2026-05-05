@@ -27,12 +27,13 @@ export async function POST(req: Request) {
     ? `\n\nAdditional context from Shohei:\n${answers.map((a: { question: string; answer: string }) => `Q: ${a.question}\nA: ${a.answer}`).join("\n\n")}`
     : "";
 
-  const res = await client.chat.completions.create({
-    model: "google/gemma-4-26b-a4b-it:free",
-    messages: [
-      {
-        role: "user",
-        content: `You are writing an email reply for Matsumoto Shohei (松本頌平), CEO of Pacific Meta (shohei.matsumoto@pacific-meta.co.jp).
+  try {
+    const res = await client.chat.completions.create({
+      model: "google/gemma-4-26b-a4b-it:free",
+      messages: [
+        {
+          role: "user",
+          content: `You are writing an email reply for Matsumoto Shohei (松本頌平), CEO of Pacific Meta (shohei.matsumoto@pacific-meta.co.jp).
 
 ## Email to reply to
 From: ${from}
@@ -65,10 +66,14 @@ English emails → reply in English:
 松本
 
 Output the reply text ONLY. No subject, no explanation, no markdown.`,
-      },
-    ],
-  });
+        },
+      ],
+    });
 
-  const reply = res.choices[0].message.content ?? "";
-  return NextResponse.json({ reply });
+    const reply = res.choices[0].message.content ?? "";
+    return NextResponse.json({ reply });
+  } catch (e: any) {
+    const message = e?.message ?? String(e);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }

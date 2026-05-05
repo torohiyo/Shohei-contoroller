@@ -23,12 +23,13 @@ export async function POST(req: Request) {
     },
   });
 
-  const res = await client.chat.completions.create({
-    model: "google/gemma-4-26b-a4b-it:free",
-    messages: [
-      {
-        role: "user",
-        content: `You are helping Matsumoto Shohei (松本頌平, Pacific Meta) reply to an email.
+  try {
+    const res = await client.chat.completions.create({
+      model: "google/gemma-4-26b-a4b-it:free",
+      messages: [
+        {
+          role: "user",
+          content: `You are helping Matsumoto Shohei (松本頌平, Pacific Meta) reply to an email.
 
 Email details:
 From: ${from}
@@ -41,12 +42,11 @@ Only ask what is genuinely unclear or missing. If the reply is obvious (e.g., a 
 
 Respond ONLY with valid JSON, no markdown:
 {"questions": ["question 1", "question 2"]}`,
-      },
-    ],
-  });
+        },
+      ],
+    });
 
-  const raw = res.choices[0].message.content ?? "";
-  try {
+    const raw = res.choices[0].message.content ?? "";
     const match = raw.match(/\{[\s\S]*\}/);
     const data = JSON.parse(match?.[0] ?? '{"questions":[]}');
     return NextResponse.json(data);

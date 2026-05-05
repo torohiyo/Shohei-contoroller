@@ -137,10 +137,16 @@ export default function MailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ subject: email.subject, from: email.from, snippet: email.snippet, body: email.body ?? "", answers }),
       });
-      const data = await res.json();
-      setQaMap((prev) => ({ ...prev, [email.id]: { ...(prev[email.id] ?? { questions: [], answers: [], step: "done" }), step: "done", reply: data.reply ?? "" } }));
-    } catch {
-      setQaMap((prev) => ({ ...prev, [email.id]: { ...(prev[email.id] ?? { questions: [], answers: [], step: "done" }), step: "done", reply: "返信案の生成に失敗しました。もう一度お試しください。" } }));
+      const text = await res.text();
+      let data: any;
+      try { data = JSON.parse(text); } catch { data = { error: text.slice(0, 200) }; }
+      if (data.error) {
+        setQaMap((prev) => ({ ...prev, [email.id]: { ...(prev[email.id] ?? { questions: [], answers: [], step: "done" }), step: "done", reply: `エラー: ${data.error}` } }));
+      } else {
+        setQaMap((prev) => ({ ...prev, [email.id]: { ...(prev[email.id] ?? { questions: [], answers: [], step: "done" }), step: "done", reply: data.reply ?? "" } }));
+      }
+    } catch (e: any) {
+      setQaMap((prev) => ({ ...prev, [email.id]: { ...(prev[email.id] ?? { questions: [], answers: [], step: "done" }), step: "done", reply: `エラー: ${e?.message ?? "通信失敗"}` } }));
     }
   }
 
