@@ -90,20 +90,25 @@ export default function MailPage() {
     setQaMap((prev) => ({ ...prev, [email.id]: { questions: [], answers: [], step: "loading_q", reply: "" } }));
     setExpanded((prev) => new Set(prev).add(email.id));
 
-    const res = await fetch("/api/gmail/questions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subject: email.subject, from: email.from, snippet: email.snippet, body: email.body ?? "" }),
-    });
-    const data = await res.json();
-    const questions: string[] = data.questions ?? [];
+    try {
+      const res = await fetch("/api/gmail/questions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subject: email.subject, from: email.from, snippet: email.snippet, body: email.body ?? "" }),
+      });
+      const data = await res.json();
+      const questions: string[] = data.questions ?? [];
 
-    if (questions.length === 0) {
-      // 質問不要 → 直接返信生成
+      if (questions.length === 0) {
+        setQaMap((prev) => ({ ...prev, [email.id]: { questions: [], answers: [], step: "loading_reply", reply: "" } }));
+        await generateReply(email, []);
+      } else {
+        setQaMap((prev) => ({ ...prev, [email.id]: { questions, answers: Array(questions.length).fill(""), step: "answering", reply: "" } }));
+      }
+    } catch {
+      // 質問生成失敗 → 直接返信生成
       setQaMap((prev) => ({ ...prev, [email.id]: { questions: [], answers: [], step: "loading_reply", reply: "" } }));
       await generateReply(email, []);
-    } else {
-      setQaMap((prev) => ({ ...prev, [email.id]: { questions, answers: Array(questions.length).fill(""), step: "answering", reply: "" } }));
     }
   }
 
@@ -126,13 +131,17 @@ export default function MailPage() {
   }
 
   async function generateReply(email: Email, answers: { question: string; answer: string }[]) {
-    const res = await fetch("/api/gmail/reply", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subject: email.subject, from: email.from, snippet: email.snippet, body: email.body ?? "", answers }),
-    });
-    const data = await res.json();
-    setQaMap((prev) => ({ ...prev, [email.id]: { ...(prev[email.id] ?? { questions: [], answers: [], step: "done" }), step: "done", reply: data.reply ?? "" } }));
+    try {
+      const res = await fetch("/api/gmail/reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subject: email.subject, from: email.from, snippet: email.snippet, body: email.body ?? "", answers }),
+      });
+      const data = await res.json();
+      setQaMap((prev) => ({ ...prev, [email.id]: { ...(prev[email.id] ?? { questions: [], answers: [], step: "done" }), step: "done", reply: data.reply ?? "" } }));
+    } catch {
+      setQaMap((prev) => ({ ...prev, [email.id]: { ...(prev[email.id] ?? { questions: [], answers: [], step: "done" }), step: "done", reply: "返信案の生成に失敗しました。もう一度お試しください。" } }));
+    }
   }
 
   async function copyText(id: string, text: string) {
