@@ -28,13 +28,15 @@ export default function Home() {
   const { addRecurring, getTodayPending, markGenerated } = useRecurringTasks();
   const [showModal, setShowModal] = useState(false);
   const [, setTick] = useState(0);
-  const [notifState, setNotifState] = useState<"unknown" | "enabled" | "disabled">("unknown");
+  const [notifState, setNotifState] = useState<"enabled" | "disabled">("disabled");
 
   const checkNotifState = useCallback(async () => {
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
-    const reg = await navigator.serviceWorker.ready;
-    const sub = await reg.pushManager.getSubscription();
-    setNotifState(sub ? "enabled" : "disabled");
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      setNotifState(sub ? "enabled" : "disabled");
+    } catch { /* サポート外ブラウザは無視 */ }
   }, []);
 
   const toggleNotification = useCallback(async () => {
@@ -159,7 +161,7 @@ export default function Home() {
             <button onClick={() => router.push("/mail")} className="text-xs text-gray-500 hover:text-indigo-600 border border-gray-200 hover:border-indigo-300 rounded-lg px-2.5 py-1.5 transition-colors">
               メール
             </button>
-            {notifState !== "unknown" && (
+            {("Notification" in window || true) && (
               <button onClick={toggleNotification}
                 title={notifState === "enabled" ? "通知オン（クリックでオフ）" : "通知をオンにする"}
                 className={`w-8 h-8 flex items-center justify-center rounded-lg border transition-colors ${notifState === "enabled" ? "border-indigo-300 bg-indigo-50 text-indigo-500" : "border-gray-200 text-gray-400 hover:text-indigo-500 hover:border-indigo-300"}`}>
