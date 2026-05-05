@@ -29,7 +29,7 @@ export async function POST(req: Request) {
 
   try {
     const res = await client.chat.completions.create({
-      model: "meta-llama/llama-3.1-8b-instruct:free",
+      model: "google/gemini-2.0-flash-001",
       messages: [
         {
           role: "user",
