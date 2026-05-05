@@ -183,13 +183,6 @@ export default function MailPage() {
           </button>
         </div>
 
-        {/* Formality slider */}
-        <div className="max-w-3xl mx-auto px-4 pb-3 flex items-center gap-3">
-          <span className="text-xs text-gray-400 shrink-0">返信トーン</span>
-          <input type="range" min={1} max={10} value={formality} onChange={(e) => setFormality(Number(e.target.value))}
-            className="flex-1 h-1.5 accent-indigo-500" />
-          <span className="text-xs font-medium text-indigo-600 w-24 shrink-0">{formality}/10 {FORMALITY_LABELS[formality]}</span>
-        </div>
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-5 space-y-3">
@@ -308,17 +301,27 @@ export default function MailPage() {
                 </div>
               )}
 
-              <div className="px-4 pb-3 flex gap-2">
-                <button onClick={() => toggleExpand(email.id)}
-                  className="text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-lg px-2.5 py-1.5 transition-colors">
-                  {isExpanded ? "閉じる" : "本文を見る"}
-                </button>
+              <div className="px-4 pb-3 space-y-2">
                 {!qa && (
-                  <button onClick={() => startReply(email)}
-                    className="text-xs text-white bg-indigo-500 hover:bg-indigo-600 rounded-lg px-2.5 py-1.5 transition-colors">
-                    返信案を生成
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-gray-400 shrink-0">トーン</span>
+                    <input type="range" min={1} max={10} value={formality} onChange={(e) => setFormality(Number(e.target.value))}
+                      className="flex-1 h-1 accent-indigo-500" />
+                    <span className="text-[10px] text-indigo-500 w-20 shrink-0 text-right">{formality}/10 {FORMALITY_LABELS[formality]}</span>
+                  </div>
                 )}
+                <div className="flex gap-2">
+                  <button onClick={() => toggleExpand(email.id)}
+                    className="text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-lg px-2.5 py-1.5 transition-colors">
+                    {isExpanded ? "閉じる" : "本文を見る"}
+                  </button>
+                  {!qa && (
+                    <button onClick={() => startReply(email)}
+                      className="text-xs text-white bg-indigo-500 hover:bg-indigo-600 rounded-lg px-2.5 py-1.5 transition-colors">
+                      返信案を生成
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           );
