@@ -20,6 +20,7 @@ interface QAState {
   answers: string[];
   step: "loading_q" | "answering" | "loading_reply" | "done";
   reply: string;
+  slots: string[];
 }
 
 const REASON_LABEL: Record<Email["reason"], string> = {
@@ -49,6 +50,12 @@ function formatDate(dateStr: string) {
   } catch { return dateStr; }
 }
 
+const FORMALITY_LABELS: Record<number, string> = {
+  1: "超カジュアル", 2: "カジュアル", 3: "フレンドリー", 4: "やや丁寧",
+  5: "標準", 6: "丁寧", 7: "フォーマル", 8: "かなりフォーマル",
+  9: "非常に丁寧", 10: "最大敬語",
+};
+
 export default function MailPage() {
   const router = useRouter();
   const { data: session } = useSession();
@@ -60,6 +67,7 @@ export default function MailPage() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState<string | null>(null);
   const [qaMap, setQaMap] = useState<Record<string, QAState>>({});
+  const [formality, setFormality] = useState(5);
 
   async function runAgent() {
     setLoading(true);
@@ -87,28 +95,26 @@ export default function MailPage() {
   }
 
   async function startReply(email: Email) {
-    setQaMap((prev) => ({ ...prev, [email.id]: { questions: [], answers: [], step: "loading_q", reply: "" } }));
+    setQaMap((prev) => ({ ...prev, [email.id]: { questions: [], answers: [], step: "loading_q", reply: "", slots: [] } }));
     setExpanded((prev) => new Set(prev).add(email.id));
 
-    try {
-      const res = await fetch("/api/gmail/questions", {
+    const [questionsResult, calendarResult] = await Promise.allSettled([
+      fetch("/api/gmail/questions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ subject: email.subject, from: email.from, snippet: email.snippet, body: email.body ?? "" }),
-      });
-      const data = await res.json();
-      const questions: string[] = data.questions ?? [];
+      }).then((r) => r.json()),
+      fetch("/api/calendar/availability").then((r) => r.json()),
+    ]);
 
-      if (questions.length === 0) {
-        setQaMap((prev) => ({ ...prev, [email.id]: { questions: [], answers: [], step: "loading_reply", reply: "" } }));
-        await generateReply(email, []);
-      } else {
-        setQaMap((prev) => ({ ...prev, [email.id]: { questions, answers: Array(questions.length).fill(""), step: "answering", reply: "" } }));
-      }
-    } catch {
-      // 質問生成失敗 → 直接返信生成
-      setQaMap((prev) => ({ ...prev, [email.id]: { questions: [], answers: [], step: "loading_reply", reply: "" } }));
-      await generateReply(email, []);
+    const questions: string[] = questionsResult.status === "fulfilled" ? (questionsResult.value.questions ?? []) : [];
+    const slots: string[] = calendarResult.status === "fulfilled" ? (calendarResult.value.slots ?? []) : [];
+
+    if (questions.length === 0) {
+      setQaMap((prev) => ({ ...prev, [email.id]: { questions: [], answers: [], step: "loading_reply", reply: "", slots } }));
+      await generateReply(email, [], slots);
+    } else {
+      setQaMap((prev) => ({ ...prev, [email.id]: { questions, answers: Array(questions.length).fill(""), step: "answering", reply: "", slots } }));
     }
   }
 
@@ -127,26 +133,26 @@ export default function MailPage() {
     if (!qa) return;
     setQaMap((prev) => ({ ...prev, [email.id]: { ...qa, step: "loading_reply" } }));
     const answers = qa.questions.map((q, i) => ({ question: q, answer: qa.answers[i] }));
-    await generateReply(email, answers);
+    await generateReply(email, answers, qa.slots);
   }
 
-  async function generateReply(email: Email, answers: { question: string; answer: string }[]) {
+  async function generateReply(email: Email, answers: { question: string; answer: string }[], slots: string[]) {
     try {
       const res = await fetch("/api/gmail/reply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject: email.subject, from: email.from, snippet: email.snippet, body: email.body ?? "", answers }),
+        body: JSON.stringify({ subject: email.subject, from: email.from, snippet: email.snippet, body: email.body ?? "", answers, formality, slots }),
       });
       const text = await res.text();
       let data: any;
       try { data = JSON.parse(text); } catch { data = { error: text.slice(0, 200) }; }
       if (data.error) {
-        setQaMap((prev) => ({ ...prev, [email.id]: { ...(prev[email.id] ?? { questions: [], answers: [], step: "done" }), step: "done", reply: `エラー: ${data.error}` } }));
+        setQaMap((prev) => ({ ...prev, [email.id]: { ...(prev[email.id] ?? { questions: [], answers: [], step: "done", slots: [] }), step: "done", reply: `エラー: ${data.error}` } }));
       } else {
-        setQaMap((prev) => ({ ...prev, [email.id]: { ...(prev[email.id] ?? { questions: [], answers: [], step: "done" }), step: "done", reply: data.reply ?? "" } }));
+        setQaMap((prev) => ({ ...prev, [email.id]: { ...(prev[email.id] ?? { questions: [], answers: [], step: "done", slots: [] }), step: "done", reply: data.reply ?? "" } }));
       }
     } catch (e: any) {
-      setQaMap((prev) => ({ ...prev, [email.id]: { ...(prev[email.id] ?? { questions: [], answers: [], step: "done" }), step: "done", reply: `エラー: ${e?.message ?? "通信失敗"}` } }));
+      setQaMap((prev) => ({ ...prev, [email.id]: { ...(prev[email.id] ?? { questions: [], answers: [], step: "done", slots: [] }), step: "done", reply: `エラー: ${e?.message ?? "通信失敗"}` } }));
     }
   }
 
@@ -175,6 +181,14 @@ export default function MailPage() {
             className="text-xs text-white bg-indigo-500 hover:bg-indigo-600 rounded-lg px-3 py-1.5 transition-colors disabled:opacity-40 flex items-center gap-1.5">
             {loading ? <><span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />分析中...</> : checked ? "再チェック" : "メールをチェック"}
           </button>
+        </div>
+
+        {/* Formality slider */}
+        <div className="max-w-3xl mx-auto px-4 pb-3 flex items-center gap-3">
+          <span className="text-xs text-gray-400 shrink-0">返信トーン</span>
+          <input type="range" min={1} max={10} value={formality} onChange={(e) => setFormality(Number(e.target.value))}
+            className="flex-1 h-1.5 accent-indigo-500" />
+          <span className="text-xs font-medium text-indigo-600 w-24 shrink-0">{formality}/10 {FORMALITY_LABELS[formality]}</span>
         </div>
       </header>
 
@@ -212,7 +226,6 @@ export default function MailPage() {
 
           return (
             <div key={email.id} className="bg-white rounded-xl shadow-sm overflow-hidden">
-              {/* Email header */}
               <div className="px-4 py-3">
                 <div className="flex items-start gap-2 mb-1">
                   <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border shrink-0 ${REASON_COLOR[email.reason]}`}>
@@ -228,19 +241,25 @@ export default function MailPage() {
                 <p className="text-xs text-gray-500 leading-relaxed line-clamp-2">{email.snippet}</p>
               </div>
 
-              {/* Expanded content */}
               {isExpanded && (
                 <div className="border-t border-gray-50 px-4 py-3 space-y-3">
-                  {/* Q&A step */}
                   {qa?.step === "loading_q" && (
                     <div className="flex items-center gap-2 text-xs text-gray-400">
                       <span className="w-3 h-3 border-2 border-gray-200 border-t-indigo-400 rounded-full animate-spin" />
-                      返信に必要な情報を確認中...
+                      返信情報を準備中...
                     </div>
                   )}
 
                   {qa?.step === "answering" && (
                     <div className="space-y-3">
+                      {qa.slots.length > 0 && (
+                        <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 space-y-1">
+                          <p className="text-[10px] font-semibold text-blue-500">空き時間（自動取得）</p>
+                          {qa.slots.map((s, i) => (
+                            <p key={i} className="text-xs text-blue-700 font-mono">{s}</p>
+                          ))}
+                        </div>
+                      )}
                       <p className="text-xs font-semibold text-gray-500">返信前に確認させてください</p>
                       {qa.questions.map((q, i) => (
                         <div key={i} className="space-y-1">
@@ -286,11 +305,9 @@ export default function MailPage() {
                       <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">{qa.reply}</p>
                     </div>
                   )}
-
                 </div>
               )}
 
-              {/* Actions */}
               <div className="px-4 pb-3 flex gap-2">
                 <button onClick={() => toggleExpand(email.id)}
                   className="text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-lg px-2.5 py-1.5 transition-colors">

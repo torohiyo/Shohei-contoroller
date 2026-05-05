@@ -122,6 +122,9 @@ export default function Home() {
             <button onClick={() => router.push("/mail")} className="text-xs text-gray-500 hover:text-indigo-600 border border-gray-200 hover:border-indigo-300 rounded-lg px-2.5 py-1.5 transition-colors">
               メール
             </button>
+            <button onClick={() => router.push("/schedule")} className="text-xs text-gray-500 hover:text-indigo-600 border border-gray-200 hover:border-indigo-300 rounded-lg px-2.5 py-1.5 transition-colors">
+              空き時間
+            </button>
             <button onClick={() => router.push("/manage")} className="text-xs text-gray-500 hover:text-indigo-600 border border-gray-200 hover:border-indigo-300 rounded-lg px-2.5 py-1.5 transition-colors">
               サジェスト管理
             </button>
