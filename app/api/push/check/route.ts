@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { redis } from "@/lib/redis";
+import { kv as redis } from "@/lib/kv";
 import { sendPush } from "@/lib/push";
 import webpush from "web-push";
 

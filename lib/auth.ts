@@ -1,6 +1,6 @@
 import { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
-import { redis } from "@/lib/redis";
+import { kv as redis } from "@/lib/kv";
 
 const PRODUCTION_URL = "https://shohei-contoroller.vercel.app";
 
