@@ -29,7 +29,9 @@ export function useCalendar() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/calendar")
+    // クライアントのローカル日付を "YYYY-MM-DD" 形式でAPIに渡す（タイムゾーンずれ防止）
+    const localDate = new Date().toLocaleDateString("en-CA"); // en-CA → "YYYY-MM-DD"
+    fetch(`/api/calendar?date=${localDate}`)
       .then((r) => {
         if (!r.ok) throw new Error("Failed to fetch");
         return r.json();

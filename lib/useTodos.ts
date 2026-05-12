@@ -48,27 +48,32 @@ export function useTodos() {
         note: params.note?.trim() || undefined,
         createdAt: new Date().toISOString(),
       };
-      persist([todo, ...todos]);
+      // stale closureを避けるためstateではなくstorageから最新を読む
+      // （forEach等で連続呼び出しされても正しく積み上がる）
+      const current = loadFromStorage();
+      persist([todo, ...current]);
     },
-    [todos, persist]
+    [persist]
   );
 
   const toggleTodo = useCallback(
     (id: string) => {
+      const current = loadFromStorage();
       persist(
-        todos.map((t) =>
+        current.map((t) =>
           t.id === id ? { ...t, status: t.status === "completed" ? "pending" : "completed" } : t
         )
       );
     },
-    [todos, persist]
+    [persist]
   );
 
   const deleteTodo = useCallback(
     (id: string) => {
-      persist(todos.filter((t) => t.id !== id));
+      const current = loadFromStorage();
+      persist(current.filter((t) => t.id !== id));
     },
-    [todos, persist]
+    [persist]
   );
 
   const syncFromCalendar = useCallback(
